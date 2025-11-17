@@ -2,8 +2,8 @@ name: Weekly Newsletter
 
 on:
   schedule:
-    # Runs every Monday at 9:00 AM UTC (adjust timezone as needed)
-    - cron: '0 9 * * 1'
+    # Runs every Sunday at 5:00 PM PST (Monday 1:00 AM UTC)
+    - cron: '0 1 * * 1'
 
   # Allows manual trigger from GitHub UI
   workflow_dispatch:
@@ -52,6 +52,7 @@ jobs:
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
           MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
           NEWSLETTER_FROM: ${{ secrets.NEWSLETTER_FROM }}
+          NEWSLETTER_FROM_NAME: ${{ secrets.NEWSLETTER_FROM_NAME }}
           NEWSLETTER_REPLY_TO: ${{ secrets.NEWSLETTER_REPLY_TO }}
           NEWSLETTER_RECIPIENTS: ${{ secrets.NEWSLETTER_RECIPIENTS }}
           REPO_ROOT: ${{ github.workspace }}/obsidian

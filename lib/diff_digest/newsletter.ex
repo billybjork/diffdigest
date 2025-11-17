@@ -87,10 +87,20 @@ defmodule DiffDigest.Newsletter do
   ## Config
 
   defp load_config do
+    from_email = fetch_env!("NEWSLETTER_FROM")
+    from_name = System.get_env("NEWSLETTER_FROM_NAME")
+
+    # Format "from" field: if name is provided, use "Name <email>", otherwise just email
+    from = if from_name && String.trim(from_name) != "" do
+      "#{from_name} <#{from_email}>"
+    else
+      from_email
+    end
+
     %{
       # All configuration values are required via environment variables
       repo_root: fetch_env!("REPO_ROOT"),
-      from: fetch_env!("NEWSLETTER_FROM"),
+      from: from,
       reply_to: fetch_env!("NEWSLETTER_REPLY_TO"),
       recipients: fetch_env!("NEWSLETTER_RECIPIENTS"),
       mailgun_domain: fetch_env!("MAILGUN_DOMAIN"),
