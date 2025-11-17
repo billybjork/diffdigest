@@ -23,11 +23,11 @@ defmodule DiffDigest.Newsletter do
   @ai_model "gpt-5"
 
   # Newsletter generation settings
-  @newsletter_max_tokens 16000  # Increased for longer newsletters
+  @newsletter_max_tokens 32000  # Increased to allow room for reasoning + output
   @newsletter_reasoning_effort "high"
 
   # Summary generation settings
-  @summary_max_tokens 3000  # Allows room for reasoning + summary text
+  @summary_max_tokens 8000  # Allows room for reasoning + summary text
   @summary_reasoning_effort "high"  # High reasoning for better summaries
 
   # Context settings
