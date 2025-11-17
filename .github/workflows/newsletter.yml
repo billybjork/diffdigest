@@ -15,6 +15,15 @@ jobs:
     steps:
       - name: Checkout diffdigest repo
         uses: actions/checkout@v4
+        with:
+          path: diffdigest
+
+      - name: Checkout Obsidian repo
+        uses: actions/checkout@v4
+        with:
+          repository: billybjork/obsidian
+          token: ${{ secrets.OBSIDIAN_PAT }}
+          path: obsidian
 
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
@@ -26,16 +35,18 @@ jobs:
         uses: actions/cache@v3
         with:
           path: |
-            deps
-            _build
-          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+            diffdigest/deps
+            diffdigest/_build
+          key: ${{ runner.os }}-mix-${{ hashFiles('diffdigest/**/mix.lock') }}
           restore-keys: |
             ${{ runner.os }}-mix-
 
       - name: Install dependencies
+        working-directory: diffdigest
         run: mix deps.get
 
       - name: Generate newsletter
+        working-directory: diffdigest
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
@@ -43,10 +54,11 @@ jobs:
           NEWSLETTER_FROM: ${{ secrets.NEWSLETTER_FROM }}
           NEWSLETTER_REPLY_TO: ${{ secrets.NEWSLETTER_REPLY_TO }}
           NEWSLETTER_RECIPIENTS: ${{ secrets.NEWSLETTER_RECIPIENTS }}
-          REPO_ROOT: ${{ secrets.REPO_ROOT }}
+          REPO_ROOT: ${{ github.workspace }}/obsidian
         run: mix newsletter.generate
 
       - name: Commit and push newsletters
+        working-directory: diffdigest
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
