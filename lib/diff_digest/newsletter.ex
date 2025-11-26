@@ -125,10 +125,10 @@ defmodule DiffDigest.Newsletter do
   ## Git
 
   defp git_diffs(repo_root, days) do
-    # Commits with stats from the specified number of days
+    # Commits with stats and diffs from the specified number of days
     # Uses relative date syntax that doesn't require shell quoting.
-    # Removed --patch to reduce token usage for large repos
-    args = ["log", "--since=#{days}.days.ago", "--stat", "--no-color"]
+    # --patch provides actual content changes for meaningful newsletter generation
+    args = ["log", "--since=#{days}.days.ago", "--stat", "--patch", "--no-color"]
 
     case System.cmd("git", args, cd: repo_root) do
       {output, 0} ->
