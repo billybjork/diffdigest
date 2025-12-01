@@ -20,7 +20,7 @@ defmodule DiffDigest.Newsletter do
   @summaries_rel_dir "priv/newsletters/summaries"
 
   # AI model configuration
-  @ai_model "gpt-5"
+  @ai_model "o1"
 
   # Newsletter generation settings
   @newsletter_max_tokens 32000  # Increased to allow room for reasoning + output
