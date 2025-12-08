@@ -132,11 +132,41 @@ defmodule DiffDigest.Newsletter do
 
     case System.cmd("git", args, cd: repo_root) do
       {output, 0} ->
-        {:ok, String.trim(output)}
+        truncated = truncate_diffs(output, 100_000)
+        {:ok, String.trim(truncated)}
 
       {output, status} ->
         {:error, {:git_log_failed, status, output}}
     end
+  end
+
+  # Intelligently truncates git log output to stay within token limits
+  # Keeps commit headers and stats, but limits individual patch sizes
+  # Max output is approximately max_chars characters
+  defp truncate_diffs(output, max_chars) when is_binary(output) do
+    if String.length(output) <= max_chars do
+      output
+    else
+      # Split on commit boundaries and truncate
+      lines = String.split(output, "\n")
+      {result, _} = truncate_lines(lines, max_chars)
+      result
+    end
+  end
+
+  defp truncate_lines(lines, max_chars) do
+    Enum.reduce(lines, {"", 0}, fn
+      line, {result, current_length} ->
+        line_with_newline = line <> "\n"
+        new_length = current_length + String.length(line_with_newline)
+
+        if new_length > max_chars do
+          # Stop and add truncation notice
+          {result <> "\n[git log truncated to fit context window]\n", new_length}
+        else
+          {result <> line_with_newline, new_length}
+        end
+    end)
   end
 
   defp check_non_empty_diffs(""), do: :empty
