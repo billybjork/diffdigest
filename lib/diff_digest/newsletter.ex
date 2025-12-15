@@ -19,16 +19,14 @@ defmodule DiffDigest.Newsletter do
   @newsletters_rel_dir "priv/newsletters"
   @summaries_rel_dir "priv/newsletters/summaries"
 
-  # AI model configuration
-  @ai_model "o1"
+  # AI model configuration (Claude/Anthropic)
+  @ai_model "claude-opus-4-5-20251101"
 
   # Newsletter generation settings
-  @newsletter_max_tokens 32000  # Increased to allow room for reasoning + output
-  @newsletter_reasoning_effort "high"
+  @newsletter_max_tokens 32000
 
   # Summary generation settings
-  @summary_max_tokens 8000  # Allows room for reasoning + summary text
-  @summary_reasoning_effort "high"  # High reasoning for better summaries
+  @summary_max_tokens 8000
 
   # Context settings
   @previous_summaries_count 5
@@ -57,7 +55,7 @@ defmodule DiffDigest.Newsletter do
            previous_summaries <- load_previous_newsletters(app_root, date),
            {:ok, newsletter_md} <-
              generate_newsletter(
-               config.openai_api_key,
+               config.anthropic_api_key,
                system_prompt,
                diffs,
                date,
@@ -65,7 +63,7 @@ defmodule DiffDigest.Newsletter do
                previous_summaries
              ),
            {:ok, summary_md} <-
-             generate_short_summary(config.openai_api_key, summary_prompt, newsletter_md),
+             generate_short_summary(config.anthropic_api_key, summary_prompt, newsletter_md),
            :ok <- ensure_output_dirs(app_root),
            :ok <- File.write(newsletter_path, newsletter_md),
            :ok <- File.write(summary_path, summary_md),
@@ -105,7 +103,7 @@ defmodule DiffDigest.Newsletter do
       recipients: fetch_env!("NEWSLETTER_RECIPIENTS"),
       mailgun_domain: fetch_env!("MAILGUN_DOMAIN"),
       mailgun_api_key: fetch_env!("MAILGUN_API_KEY"),
-      openai_api_key: fetch_env!("OPENAI_API_KEY")
+      anthropic_api_key: fetch_env!("ANTHROPIC_API_KEY")
     }
   end
 
@@ -272,19 +270,22 @@ defmodule DiffDigest.Newsletter do
     {newsletter_path, summary_path, slug}
   end
 
-  ## OpenAI client
+  ## Anthropic Claude client
 
-  defp openai_req_client(api_key) do
+  defp anthropic_req_client(api_key) do
     Req.new(
-      base_url: "https://api.openai.com/v1",
-      auth: {:bearer, api_key},
+      base_url: "https://api.anthropic.com/v1",
+      headers: [
+        {"x-api-key", api_key},
+        {"anthropic-version", "2023-06-01"}
+      ],
       json: true,
-      receive_timeout: 300_000  # 5 minutes for GPT-5 reasoning
+      receive_timeout: 300_000  # 5 minutes for long generation
     )
   end
 
   defp generate_newsletter(api_key, system_prompt, diffs, date, days, previous_summaries) do
-    client = openai_req_client(api_key)
+    client = anthropic_req_client(api_key)
 
     start_date = Date.add(date, -(days - 1))
     date_range = "#{Date.to_iso8601(start_date)} to #{Date.to_iso8601(date)}"
@@ -320,24 +321,23 @@ defmodule DiffDigest.Newsletter do
 
     body = %{
       "model" => @ai_model,
-      "input" => [
-        %{"role" => "system", "content" => system_prompt},
+      "max_tokens" => @newsletter_max_tokens,
+      "system" => system_prompt,
+      "messages" => [
         %{"role" => "user", "content" => user_prompt}
-      ],
-      "max_output_tokens" => @newsletter_max_tokens,
-      "reasoning" => %{"effort" => @newsletter_reasoning_effort}
+      ]
     }
 
     resp =
-      Req.post!(client, url: "/responses", json: body)
+      Req.post!(client, url: "/messages", json: body)
 
-    Logger.debug("OpenAI Newsletter Response: #{inspect(resp.body, pretty: true)}")
+    Logger.debug("Claude Newsletter Response: #{inspect(resp.body, pretty: true)}")
 
     extract_output_text(resp.body)
   end
 
   defp generate_short_summary(api_key, summary_prompt, newsletter_markdown) do
-    client = openai_req_client(api_key)
+    client = anthropic_req_client(api_key)
 
     user_prompt = """
     Newsletter:
@@ -349,58 +349,50 @@ defmodule DiffDigest.Newsletter do
 
     body = %{
       "model" => @ai_model,
-      "input" => [
-        %{"role" => "system", "content" => summary_prompt},
+      "max_tokens" => @summary_max_tokens,
+      "system" => summary_prompt,
+      "messages" => [
         %{"role" => "user", "content" => user_prompt}
-      ],
-      "max_output_tokens" => @summary_max_tokens,
-      "reasoning" => %{"effort" => @summary_reasoning_effort}
+      ]
     }
 
     resp =
-      Req.post!(client, url: "/responses", json: body)
+      Req.post!(client, url: "/messages", json: body)
 
-    Logger.debug("OpenAI Summary Response: #{inspect(resp.body, pretty: true)}")
+    Logger.debug("Claude Summary Response: #{inspect(resp.body, pretty: true)}")
 
     extract_output_text(resp.body)
   end
 
-  # Parses the Responses API JSON into a plain text string.
+  # Parses the Claude Messages API JSON into a plain text string.
   #
   # Expected shape (simplified):
   # %{
-  #   "output" => [
-  #     %{
-  #       "type" => "message",
-  #       "role" => "assistant",
-  #       "content" => [
-  #         %{"type" => "output_text", "text" => "..."}
-  #       ]
-  #     },
-  #     ...
-  #   ]
+  #   "content" => [
+  #     %{"type" => "text", "text" => "..."}
+  #   ],
+  #   ...
   # }
-  defp extract_output_text(%{"output" => output}) when is_list(output) do
-    message =
-      Enum.find(output, fn item -> item["type"] == "message" end)
+  defp extract_output_text(%{"content" => content}) when is_list(content) do
+    case Enum.find(content, fn part -> part["type"] == "text" end) do
+      %{"text" => text} ->
+        Logger.debug("Successfully extracted text of length: #{String.length(text)}")
+        {:ok, text}
 
-    Logger.debug("Found message: #{inspect(message != nil)}")
-
-    with %{"content" => content} <- message,
-         %{"text" => text} <-
-           Enum.find(content, fn part -> part["type"] == "output_text" end) do
-      Logger.debug("Successfully extracted text of length: #{String.length(text)}")
-      {:ok, text}
-    else
-      result ->
-        Logger.debug("Extract failed with: #{inspect(result)}")
+      _ ->
+        Logger.debug("No text content found in response")
         {:error, :no_output_text_found}
     end
   end
 
+  defp extract_output_text(%{"error" => error}) do
+    Logger.error("Claude API error: #{inspect(error)}")
+    {:error, {:claude_api_error, error}}
+  end
+
   defp extract_output_text(response) do
     Logger.debug("Response doesn't match expected shape: #{inspect(Map.keys(response))}")
-    {:error, :unexpected_openai_response_shape}
+    {:error, :unexpected_claude_response_shape}
   end
 
   ## Mailgun email
