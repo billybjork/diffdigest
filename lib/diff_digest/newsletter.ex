@@ -130,7 +130,7 @@ defmodule DiffDigest.Newsletter do
 
     case System.cmd("git", args, cd: repo_root) do
       {output, 0} ->
-        truncated = truncate_diffs(output, 100_000)
+        truncated = truncate_diffs(output, 50_000)
         {:ok, String.trim(truncated)}
 
       {output, status} ->
@@ -153,17 +153,16 @@ defmodule DiffDigest.Newsletter do
   end
 
   defp truncate_lines(lines, max_chars) do
-    Enum.reduce(lines, {"", 0}, fn
-      line, {result, current_length} ->
-        line_with_newline = line <> "\n"
-        new_length = current_length + String.length(line_with_newline)
+    Enum.reduce_while(lines, {"", 0}, fn line, {result, current_length} ->
+      line_with_newline = line <> "\n"
+      new_length = current_length + String.length(line_with_newline)
 
-        if new_length > max_chars do
-          # Stop and add truncation notice
-          {result <> "\n[git log truncated to fit context window]\n", new_length}
-        else
-          {result <> line_with_newline, new_length}
-        end
+      if new_length > max_chars do
+        # Stop processing and add truncation notice
+        {:halt, {result <> "\n[git log truncated to fit context window]\n", new_length}}
+      else
+        {:cont, {result <> line_with_newline, new_length}}
+      end
     end)
   end
 
