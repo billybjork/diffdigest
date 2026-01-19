@@ -25,6 +25,7 @@ jobs:
           repository: billybjork/obsidian
           token: ${{ secrets.OBSIDIAN_PAT }}
           path: obsidian
+          fetch-depth: 0  # Full history needed for git log --since
 
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
